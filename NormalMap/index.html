@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://xianqw.github.io/graphicsnote.github.io/NormalMap/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>法线纹理 - 图形学笔记</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/styles/github.min.css">
+
+        <script src="../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../js/bootstrap.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">图形学笔记</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href=".." class="nav-link">主页</a>
+                            </li>
+                            <li class="dropdown active">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">目录 <b class="caret"></b></a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="./" class="dropdown-item active">法线纹理</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href=".." class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="https://github.com/XIANQw/graphicsnote.github.io/edit/master/docs/NormalMap.md" class="nav-link"><i class="fa fa-github"></i> Edit on GitHub</a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#_1" class="nav-link">法线贴图</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#_2" class="nav-link">使用</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#_4" class="nav-link">补充</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="_1">法线贴图</h1>
+<p>法线贴图表示的是切线空间下的法向量, 任何朝向的平面都可以适用同一套法线贴图.</p>
+<h2 id="_2">使用</h2>
+<h3 id="_3">顶点数据</h3>
+<p>顶点数据除了<code>pos</code>, <code>texcoord</code>, <code>normal</code>外还需<code>Tangent</code>或<code>Bitangent</code>.</p>
+<h3 id="vs">VS</h3>
+<p>vs中建立TBN矩阵, 用于将切线空间的法线转到世界空间便于后续光照计算</p>
+<pre><code>// 将切线从模型空间转到世界空间
+half4 tangentWorld = half4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);
+half3x3 tangentToWorld = CreateTangentToWorldPerVertex(normalWorld, tangentWorld.xyz, tangentWorld.w);
+
+// Unity构建TBN矩阵的函数
+half3x3 CreateTangentToWorldPerVertex(half3 normal, half3 tangent, half tangentSign)
+{
+    // For odd-negative scale transforms we need to flip the sign
+    half sign = tangentSign * unity_WorldTransformParams.w;
+    half3 binormal = cross(normal, tangent) * sign;
+    return half3x3(tangent, binormal, normal);
+}
+</code></pre>
+<h3 id="fragment">Fragment</h3>
+<pre><code>half3 normalTangent = UnpackScaleNormal(tex2D (_BumpMap, texcoords.xy), _BumpScale);
+</code></pre>
+<p><code>UnpackNormal</code>采样出来的切线空间法向量, 将<code>[0, 1]</code>空间转换回<code>[-1, 1]</code>, <code>DXT5nm</code>压缩的法线贴图只会存储<code>xy</code>值所以需要算出<code>z</code></p>
+<pre><code>// Unpack normal as DXT5nm (1, y, 1, x) or BC5 (x, y, 0, 1)
+// Note neutral texture like &quot;bump&quot; is (0, 0, 1, 1) to work with both plain RGB normal and DXT5nm/BC5
+fixed3 UnpackNormalmapRGorAG(fixed4 packednormal)
+{
+    // This do the trick
+   packednormal.x *= packednormal.w;
+
+    fixed3 normal;
+    normal.xy = packednormal.xy * 2 - 1;
+    normal.z = sqrt(1 - saturate(dot(normal.xy, normal.xy)));
+    return normal;
+}
+inline fixed3 UnpackNormal(fixed4 packednormal)
+{
+#if defined(UNITY_NO_DXT5nm)
+    return packednormal.xyz * 2 - 1;
+#else
+    return UnpackNormalmapRGorAG(packednormal);
+#endif
+}
+</code></pre>
+<p>最后将<code>normalTangent</code>转换到世界空间坐标再归一化就可以使用了</p>
+<pre><code>half3 normalWorld = normalize(mul(normalTangent, tangentToWorld));
+</code></pre>
+<h2 id="_4">补充</h2>
+<p><code>odd-negative scaling</code> : 奇数轴负缩放, xyz中有1或3个轴的缩放值为负. 具有<code>odd-negative scaling</code>和没有的物体渲染状态不同, 因此也不能动态合批\
+在Unity中<code>vertex.tangent.w</code> = 1 或 -1
+之所以加了这个值, 是因为在<code>OpenGL</code>和<code>DirectX</code>平台上UV走向不一样.</p>
+<p><code>OpenGL</code>平台，U水平向右，V垂直向上即+y\
+<code>DirectX</code>平台，U水平向右，V垂直向下即-y\
+而Unity遵循的是<code>OpenGL</code>规范，在导入模型的时候uv走向是+y，所以如果在windows上Unity用<code>DirectX</code>的情况下，叉乘得到的<code>B'</code>刚好反向了，手性错误。所以Unity存储了一个手性信息在<code>tangent.w</code>里，在正交化最后得到切线<code>T'</code>的时候计算当前平台的手性值并存在<code>tangent.w</code>中。</p>
+<p>所以副切线的计算时才会 <code>*sign</code></p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js" defer></script>
+        <script src="../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
