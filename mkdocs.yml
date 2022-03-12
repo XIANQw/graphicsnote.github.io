@@ -11,4 +11,10 @@ site_url: 'https://xianqw.github.io/graphicsnote.github.io/'
 
 repo_url: 'https://github.com/XIANQw/graphicsnote.github.io'
 
+edit_uri: root/docs/
+
 docs_dir: 'docs'
+
+theme:
+  name: null
+  custom_dir: 'cinder'
