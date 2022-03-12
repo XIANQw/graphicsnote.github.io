@@ -1,0 +1,14 @@
+nav:
+  - 主页: 'index.md'
+  - 目录:
+    - 法线纹理: 'NormalMap.md'
+  
+site_name: '图形学笔记'
+
+site_description: '图形学笔记'
+
+site_url: 'https://xianqw.github.io/graphicsnote.github.io/'
+
+repo_url: 'https://github.com/XIANQw/graphicsnote.github.io'
+
+docs_dir: 'docs'
