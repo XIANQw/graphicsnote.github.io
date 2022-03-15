@@ -103,7 +103,7 @@ Has uniform computation: false
 - `Position shader`: 只有`position`相关计算
 - `Varying Shader`: 计算剩下的所有`vertex attribute`
 
-![IDVS架构](../img/IDVS架构.png)
+![IDVS架构](img/IDVS架构.png)
 
 `Pos shader`对每一个索引顶点都会执行, `Varying shader`只对剔除后的可见图元执行, 所以这两个`shader`的数据被分开表示.\
 原文:
@@ -123,7 +123,7 @@ performance tables for each of these variants.
 - `Texture unit (T)`\
   执行所有纹理采样和过滤操作
 
-![Bifrost架构](../img/Bifrost架构.png)
+![Bifrost架构](img/Bifrost架构.png)
 
 #### Work registers
 `Bifrost GPU shader core` 可以创建多个线程, 取决于正在使用的`Shader programs`的`work registers`数量
@@ -207,6 +207,6 @@ void main()
 ```
 分析结果
 
-![采样9次分析结果](../img/采样10次.png)
+![采样9次分析结果](img/采样10次.png)
 
 ### Load & Store
