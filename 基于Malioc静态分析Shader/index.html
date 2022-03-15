@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="图形学笔记">
+    
+    <link rel="canonical" href="https://xianqw.github.io/graphicsnote.github.io/%E5%9F%BA%E4%BA%8EMalioc%E9%9D%99%E6%80%81%E5%88%86%E6%9E%90Shader/">
+    <link rel="shortcut icon" href="../img/favicon.ico">
+
+    
+    <title>Shader静态分析 - 图形学笔记</title>
+    
+
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.12.0/css/all.css">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.12.0/css/v4-shims.css">
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.min.css">
+    <link href='//rsms.me/inter/inter.css' rel='stylesheet' type='text/css'>
+    <link href='//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,700italic,400,300,600,700&subset=latin-ext,latin' rel='stylesheet' type='text/css'>
+    <link href="../css/bootstrap-custom.min.css" rel="stylesheet">
+    <link href="../css/base.min.css" rel="stylesheet">
+    <link href="../css/cinder.min.css" rel="stylesheet">
+
+    
+        
+        <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.18.0/build/styles/github.min.css">
+        
+    
+
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+            <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+        <![endif]-->
+
+    
+
+     
+</head>
+
+<body>
+
+    <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+
+        <!-- Collapsed navigation -->
+        <div class="navbar-header">
+            <!-- Expander button -->
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            
+
+            <!-- Main title -->
+
+            
+              <a class="navbar-brand" href="..">图形学笔记</a>
+            
+        </div>
+
+        <!-- Expanded navigation -->
+        <div class="navbar-collapse collapse">
+                <!-- Main navigation -->
+                <ul class="nav navbar-nav">
+                
+                
+                    <li >
+                        <a href="..">主页</a>
+                    </li>
+                
+                
+                
+                    <li class="dropdown active">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">目录 <b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                        
+                            
+<li >
+    <a href="../NormalMap/">法线纹理</a>
+</li>
+
+                        
+                            
+<li class="active">
+    <a href="./">Shader静态分析</a>
+</li>
+
+                        
+                        </ul>
+                    </li>
+                
+                
+                </ul>
+
+            <ul class="nav navbar-nav navbar-right">
+                    <li>
+                        <a href="#" data-toggle="modal" data-target="#mkdocs_search_modal">
+                            <i class="fas fa-search"></i> Search
+                        </a>
+                    </li>
+                    <li >
+                        <a rel="prev" href="../NormalMap/">
+                            <i class="fas fa-arrow-left"></i> Previous
+                        </a>
+                    </li>
+                    <li class="disabled">
+                        <a rel="next" >
+                            Next <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://github.com/XIANQw/graphicsnote.github.io"><i class="fab fa-github"></i> GitHub</a>
+                    </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+    <div class="container">
+        
+        
+        <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
+    <ul class="nav bs-sidenav">
+        <li class="first-level active"><a href="#maliocshader">基于Malioc静态分析Shader</a></li>
+            <li class="second-level"><a href="#mali-offline-compiler">Mali Offline Compiler</a></li>
+                
+            <li class="second-level"><a href="#_1">使用方法</a></li>
+                
+            <li class="second-level"><a href="#_2">性能分析</a></li>
+                
+            <li class="second-level"><a href="#mali-gpu">Mali GPU 静态分析数据项</a></li>
+                
+                <li class="third-level"><a href="#bifrost">Bifrost架构</a></li>
+                <li class="third-level"><a href="#valhall-architecture">Valhall architecture</a></li>
+            <li class="second-level"><a href="#_3">测试各项数据</a></li>
+                
+                <li class="third-level"><a href="#texture">Texture</a></li>
+                <li class="third-level"><a href="#load-store">Load &amp; Store</a></li>
+    </ul>
+</div></div>
+        <div class="col-md-9" role="main">
+
+<h1 id="maliocshader">基于Malioc静态分析Shader</h1>
+<h2 id="mali-offline-compiler">Mali Offline Compiler</h2>
+<p><code>malioc</code> 是<code>arm</code>推出的基于<code>mali GPU</code>的<code>shader</code>离线静态分析工具.</p>
+<p>支持以下GPU</p>
+<pre><code>• Mali-T700 series (Midgard architecture)
+• Mali-T800 series (Midgard architecture)
+• Mali‑G31 (Bifrost architecture)
+• Mali‑G51 and Mali‑G52 (Bifrost architecture)
+• Mali‑G71, Mali-G72, and Mali-G76 (Bifrost architecture)
+• Mali‑G57, Mali‑G68, Mali‑G77, and Mali‑G78 (Valhall architecture)
+</code></pre>
+<h2 id="_1">使用方法</h2>
+<p>命令行输入</p>
+<pre><code>malioc -c &lt;target_gpu&gt; [&lt;shader_type&gt;] &lt;file1&gt; [&lt;file2&gt; …] [-o &lt;file&gt;]
+</code></pre>
+<p><code>shader_type</code>可输入</p>
+<pre><code>• --vertex
+• --tessellation_control
+• --tessellation_evaluation
+• --geometry
+• --fragment
+• --compute
+</code></pre>
+<p>如果<code>file</code>已经使用了以下扩展名则无需指定<code>shader_type</code></p>
+<pre><code>.vert OpenGL ES vertex shader.
+.tesc OpenGL ES tessellation control shader.
+.tese OpenGL ES tessellation evaluation shader.
+.geom OpenGL ES geometry shader.
+.frag OpenGL ES fragment shader.
+.comp OpenGL ES compute shader.
+</code></pre>
+<p>用<code>-D</code>可以定义<code>Shader</code>中的宏来执行部分代码</p>
+<pre><code>-Dfoo
+定义foo为1
+-Dfoo=bar
+定义foo为bar的值
+</code></pre>
+<h2 id="_2">性能分析</h2>
+<p>执行以下命令行代码</p>
+<pre><code>$ malioc.exe Unlit-test-LOD100.vert
+</code></pre>
+<p>得到以下性能数据</p>
+<pre><code>Mali Offline Compiler v7.4.0 (Build 330167)
+Copyright 2007-2021 Arm Limited, all rights reserved
+
+Configuration
+=============
+
+Hardware: Mali-G710 r0p0
+Architecture: Valhall
+Driver: r32p0-00rel0
+Shader type: OpenGL ES Vertex
+
+Main shader
+===========
+
+Position variant
+----------------
+
+Work registers: 19
+Uniform registers: 44
+Stack spilling: false
+16-bit arithmetic: 0%
+
+                              FMA     CVT     SFU      LS       T    Bound
+Total instruction cycles:    0.25    0.00    0.00    2.00    0.00       LS
+Shortest path cycles:        0.25    0.00    0.00    2.00    0.00       LS
+Longest path cycles:         0.25    0.00    0.00    2.00    0.00       LS
+
+FMA = Arith FMA, CVT = Arith CVT, SFU = Arith SFU, LS = Load/Store, T = Texture
+
+Varying variant
+---------------
+
+Work registers: 7
+Uniform registers: 12
+Stack spilling: false
+16-bit arithmetic: 0%
+
+                              FMA     CVT     SFU      LS       T    Bound
+Total instruction cycles:    0.02    0.00    0.00    3.00    0.00       LS
+Shortest path cycles:        0.02    0.00    0.00    3.00    0.00       LS
+Longest path cycles:         0.02    0.00    0.00    3.00    0.00       LS
+
+FMA = Arith FMA, CVT = Arith CVT, SFU = Arith SFU, LS = Load/Store, T = Texture
+
+Shader properties
+=================
+
+Has uniform computation: false
+</code></pre>
+<p>看到<code>vertex shader</code>被分为了<code>Position variant</code>和<code>Varing variant</code>两段. 在<code>Bifrost</code>和<code>Valhall</code>架构上, <code>.vert</code>会被<code>Index-Driven Vertex Shading (IDVS)</code>管线编译成两个<code>binaries</code>
+- <code>Position shader</code>: 只有<code>position</code>相关计算
+- <code>Varying Shader</code>: 计算剩下的所有<code>vertex attribute</code></p>
+<p><img alt="IDVS架构" src="../img/IDVS架构.png" /></p>
+<p><code>Pos shader</code>对每一个索引顶点都会执行, <code>Varying shader</code>只对剔除后的可见图元执行, 所以这两个<code>shader</code>的数据被分开表示.\
+原文:</p>
+<pre><code>The position shader is executed for every index vertex, but the varying shader is only executed for
+vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate
+performance tables for each of these variants.
+</code></pre>
+<h2 id="mali-gpu">Mali GPU 静态分析数据项</h2>
+<h3 id="bifrost">Bifrost架构</h3>
+<ul>
+<li><code>Arithmetic unit (A)</code>\
+  计算单元</li>
+<li><code>Load/store unit (LS)</code>\
+  执行所有非Texture的内存访问, 包括buffer, image和原子操作</li>
+<li><code>Varying unit (V)</code>\
+  执行变量插值</li>
+<li><code>Texture unit (T)</code>\
+  执行所有纹理采样和过滤操作</li>
+</ul>
+<p><img alt="Bifrost架构" src="../img/Bifrost架构.png" /></p>
+<h4 id="work-registers">Work registers</h4>
+<p><code>Bifrost GPU shader core</code> 可以创建多个线程, 取决于正在使用的<code>Shader programs</code>的<code>work registers</code>数量
+- <code>0-32 registers</code>: Maximum thread capacity
+- <code>33-64 registers</code>: Half thread capacity</p>
+<p>所以如果比起<code>highp</code>, 尽可能使用更多的<code>mediump</code>的话就能创建更多线程来让<code>GPU</code>的负载上升从而提高性能</p>
+<h3 id="valhall-architecture">Valhall architecture</h3>
+<p><code>Valhall</code>有6种并行管线, 其中3种<code>arithmetic</code>管线和3种<code>fixted function support</code>管线
+1. <code>Arithmetic fused multiply accumulate unit (FMA)</code>\
+   FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作\
+   <code>The FMA pipelines are the main arithmetic pipelines, implementing the floating-point
+multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp,
+and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.</code>
+2. <code>Arithmetic convert unit (CVT)</code>\
+   <code>The CVT pipelines implement simple operations, such as format conversion and integer
+addition.</code>
+3. <code>Arithmetic special functions unit (SFU)</code>\
+   特殊运算单元, 用于执行倒数和超越函数. <code>Each SFU pipeline implements a 4-wide issue
+path, executing a 16-wide warp over 4 clock cycles</code>
+   <code>超越函数: https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8</code>
+4. 5.6. <code>Load/store unit (LS)</code>, <code>Varying unit (V)</code>和<code>Texture unit (T)</code></p>
+<h2 id="_3">测试各项数据</h2>
+<h3 id="texture">Texture</h3>
+<p>采样9次</p>
+<pre><code>#version 300 es
+
+precision highp float;
+precision highp int;
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+vec4 u_xlat0;
+mediump vec4 u_xlat16_0;
+vec4 u_xlat1;
+mediump vec4 u_xlat16_1;
+mediump vec4 u_xlat16_2;
+void main()
+{
+    u_xlat0 = vs_TEXCOORD0.xyxy + vec4(-1.0, 1.0, 0.0, 1.0);
+    u_xlat16_1 = texture(_MainTex, u_xlat0.xy);
+    u_xlat16_0 = texture(_MainTex, u_xlat0.zw);
+    u_xlat0 = u_xlat16_0 + u_xlat16_1;
+    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(1.0, 1.0, -1.0, 0.0);
+    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
+    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
+    u_xlat0 = u_xlat0 + u_xlat16_2;
+    u_xlat0 = u_xlat16_1 + u_xlat0;
+    u_xlat16_1 = texture(_MainTex, vs_TEXCOORD0.xy);
+    u_xlat0 = u_xlat0 + u_xlat16_1;
+    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(1.0, 0.0, -1.0, -1.0);
+    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
+    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
+    u_xlat0 = u_xlat0 + u_xlat16_2;
+    u_xlat0 = u_xlat16_1 + u_xlat0;
+    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(0.0, -1.0, 1.0, -1.0);
+    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
+    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
+    u_xlat0 = u_xlat0 + u_xlat16_2;
+    u_xlat0 = u_xlat16_1 + u_xlat0;
+    SV_Target0 = u_xlat0 * vec4(0.111111112, 0.111111112, 0.111111112, 0.111111112);
+    return;
+}
+
+</code></pre>
+<p>分析结果</p>
+<p><img alt="采样9次分析结果" src="../img/采样10次.png" /></p>
+<h3 id="load-store">Load &amp; Store</h3></div>
+        
+        
+    </div>
+
+    
+      <footer class="col-md-12 text-center">
+          
+          
+            <hr>
+            <p>
+            <small>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a>.</small>
+            </p>
+          
+
+          
+          
+      </footer>
+    
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="../js/bootstrap-3.0.3.min.js"></script>
+
+    
+    <script src="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.18.0/build/highlight.min.js"></script>
+        
+    <script>hljs.initHighlightingOnLoad();</script>
+    
+
+    <script>var base_url = ".."</script>
+    
+    <script src="../js/base.js"></script>
+    <script src="../search/main.js"></script>
+
+    <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">
+                    <span aria-hidden="true">&times;</span>
+                    <span class="sr-only">Close</span>
+                </button>
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form>
+                    <div class="form-group">
+                        <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+    </body>
+
+</html>
