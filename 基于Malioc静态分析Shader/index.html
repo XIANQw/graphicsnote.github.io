@@ -239,7 +239,7 @@ Has uniform computation: false
 <p>看到<code>vertex shader</code>被分为了<code>Position variant</code>和<code>Varing variant</code>两段. 在<code>Bifrost</code>和<code>Valhall</code>架构上, <code>.vert</code>会被<code>Index-Driven Vertex Shading (IDVS)</code>管线编译成两个<code>binaries</code>
 - <code>Position shader</code>: 只有<code>position</code>相关计算
 - <code>Varying Shader</code>: 计算剩下的所有<code>vertex attribute</code></p>
-<p><img alt="IDVS架构" src="../img/IDVS架构.png" /></p>
+<p><img alt="IDVS架构" src="../img/IDVS%E6%9E%B6%E6%9E%84.png" /></p>
 <p><code>Pos shader</code>对每一个索引顶点都会执行, <code>Varying shader</code>只对剔除后的可见图元执行, 所以这两个<code>shader</code>的数据被分开表示.\
 原文:</p>
 <pre><code>The position shader is executed for every index vertex, but the varying shader is only executed for
@@ -258,7 +258,7 @@ performance tables for each of these variants.
 <li><code>Texture unit (T)</code>\
   执行所有纹理采样和过滤操作</li>
 </ul>
-<p><img alt="Bifrost架构" src="../img/Bifrost架构.png" /></p>
+<p><img alt="Bifrost架构" src="../img/Bifrost%E6%9E%B6%E6%9E%84.png" /></p>
 <h4 id="work-registers">Work registers</h4>
 <p><code>Bifrost GPU shader core</code> 可以创建多个线程, 取决于正在使用的<code>Shader programs</code>的<code>work registers</code>数量
 - <code>0-32 registers</code>: Maximum thread capacity
@@ -331,7 +331,7 @@ void main()
 
 </code></pre>
 <p>分析结果</p>
-<p><img alt="采样9次分析结果" src="../img/采样10次.png" /></p>
+<p><img alt="采样9次分析结果" src="../img/%E9%87%87%E6%A0%B710%E6%AC%A1.png" /></p>
 <h3 id="load-store">Load &amp; Store</h3></div>
         
         
