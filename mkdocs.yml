@@ -2,6 +2,7 @@ nav:
   - 主页: 'index.md'
   - 目录:
     - 法线纹理: 'NormalMap.md'
+    - Shader静态分析: '基于Malioc静态分析Shader.md'
   
 site_name: '图形学笔记'
 
@@ -11,7 +12,7 @@ site_url: 'https://xianqw.github.io/graphicsnote.github.io/'
 
 repo_url: 'https://github.com/XIANQw/graphicsnote.github.io'
 
-edit_uri: root/docs/
+edit_uri: ''
 
 docs_dir: 'docs'
 
