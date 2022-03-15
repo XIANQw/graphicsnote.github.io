@@ -136,7 +136,7 @@
             <li class="second-level"><a href="#mali-gpu">Mali GPU 静态分析数据项</a></li>
                 
                 <li class="third-level"><a href="#bifrost">Bifrost架构</a></li>
-                <li class="third-level"><a href="#valhall-architecture">Valhall architecture</a></li>
+                <li class="third-level"><a href="#valhall">Valhall 架构</a></li>
             <li class="second-level"><a href="#_3">测试各项数据</a></li>
                 
                 <li class="third-level"><a href="#texture">Texture</a></li>
@@ -177,17 +177,17 @@
 .comp OpenGL ES compute shader.
 </code></pre>
 <p>用<code>-D</code>可以定义<code>Shader</code>中的宏来执行部分代码</p>
-<pre><code>-Dfoo
+<pre><code class="language-txt">-Dfoo
 定义foo为1
 -Dfoo=bar
 定义foo为bar的值
 </code></pre>
 <h2 id="_2">性能分析</h2>
 <p>执行以下命令行代码</p>
-<pre><code>$ malioc.exe Unlit-test-LOD100.vert
+<pre><code class="language-txt">$ malioc.exe Unlit-test-LOD100.vert
 </code></pre>
 <p>得到以下性能数据</p>
-<pre><code>Mali Offline Compiler v7.4.0 (Build 330167)
+<pre><code class="language-txt">Mali Offline Compiler v7.4.0 (Build 330167)
 Copyright 2007-2021 Arm Limited, all rights reserved
 
 Configuration
@@ -236,49 +236,64 @@ Shader properties
 
 Has uniform computation: false
 </code></pre>
-<p>看到<code>vertex shader</code>被分为了<code>Position variant</code>和<code>Varing variant</code>两段. 在<code>Bifrost</code>和<code>Valhall</code>架构上, <code>.vert</code>会被<code>Index-Driven Vertex Shading (IDVS)</code>管线编译成两个<code>binaries</code>
-- <code>Position shader</code>: 只有<code>position</code>相关计算
-- <code>Varying Shader</code>: 计算剩下的所有<code>vertex attribute</code></p>
+<p>看到<code>vertex shader</code>被分为了<code>Position variant</code>和<code>Varing variant</code>两段. 在<code>Bifrost</code>和<code>Valhall</code>架构上, <code>.vert</code>会被<code>Index-Driven Vertex Shading (IDVS)</code>管线编译成两个<code>binaries</code></p>
+<ul>
+<li><code>Position shader</code>: 只有<code>position</code>相关计算</li>
+<li><code>Varying Shader</code>: 计算剩下的所有<code>vertex attribute</code></li>
+</ul>
 <p><img alt="IDVS架构" src="../img/IDVS%E6%9E%B6%E6%9E%84.png" /></p>
-<p><code>Pos shader</code>对每一个索引顶点都会执行, <code>Varying shader</code>只对剔除后的可见图元执行, 所以这两个<code>shader</code>的数据被分开表示.\
+<p><code>Pos shader</code>对每一个索引顶点都会执行, <code>Varying shader</code>只对剔除后的可见图元执行, 所以这两个<code>shader</code>的数据被分开表示.<br />
 原文:</p>
-<pre><code>The position shader is executed for every index vertex, but the varying shader is only executed for
-vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate
-performance tables for each of these variants.
+<pre><code class="language-txt">The position shader is executed for every index vertex, but the varying shader is only executed for vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate performance tables for each of these variants.
 </code></pre>
 <h2 id="mali-gpu">Mali GPU 静态分析数据项</h2>
 <h3 id="bifrost">Bifrost架构</h3>
 <ul>
-<li><code>Arithmetic unit (A)</code>\
+<li><code>Arithmetic unit (A)</code><br />
   计算单元</li>
-<li><code>Load/store unit (LS)</code>\
+<li><code>Load/store unit (LS)</code><br />
   执行所有非Texture的内存访问, 包括buffer, image和原子操作</li>
-<li><code>Varying unit (V)</code>\
+<li><code>Varying unit (V)</code><br />
   执行变量插值</li>
-<li><code>Texture unit (T)</code>\
+<li><code>Texture unit (T)</code><br />
   执行所有纹理采样和过滤操作</li>
 </ul>
 <p><img alt="Bifrost架构" src="../img/Bifrost%E6%9E%B6%E6%9E%84.png" /></p>
 <h4 id="work-registers">Work registers</h4>
-<p><code>Bifrost GPU shader core</code> 可以创建多个线程, 取决于正在使用的<code>Shader programs</code>的<code>work registers</code>数量
-- <code>0-32 registers</code>: Maximum thread capacity
-- <code>33-64 registers</code>: Half thread capacity</p>
-<p>所以如果比起<code>highp</code>, 尽可能使用更多的<code>mediump</code>的话就能创建更多线程来让<code>GPU</code>的负载上升从而提高性能</p>
-<h3 id="valhall-architecture">Valhall architecture</h3>
-<p><code>Valhall</code>有6种并行管线, 其中3种<code>arithmetic</code>管线和3种<code>fixted function support</code>管线
-1. <code>Arithmetic fused multiply accumulate unit (FMA)</code>\
-   FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作\
-   <code>The FMA pipelines are the main arithmetic pipelines, implementing the floating-point
-multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp,
-and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.</code>
-2. <code>Arithmetic convert unit (CVT)</code>\
-   <code>The CVT pipelines implement simple operations, such as format conversion and integer
-addition.</code>
-3. <code>Arithmetic special functions unit (SFU)</code>\
-   特殊运算单元, 用于执行倒数和超越函数. <code>Each SFU pipeline implements a 4-wide issue
-path, executing a 16-wide warp over 4 clock cycles</code>
-   <code>超越函数: https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8</code>
-4. 5.6. <code>Load/store unit (LS)</code>, <code>Varying unit (V)</code>和<code>Texture unit (T)</code></p>
+<p><code>Bifrost GPU shader core</code> 可以创建多个线程, 取决于正在使用的<code>Shader programs</code>的<code>work registers</code>数量</p>
+<ul>
+<li><code>0-32 registers</code>:
+Maximum thread capacity</li>
+<li><code>33-64 registers</code>:
+Half thread capacity<br />
+所以如果比起<code>highp</code>, 尽可能使用更多的<code>mediump</code>的话就能创建更多线程来让<code>GPU</code>的负载上升从而提高性能</li>
+</ul>
+<h3 id="valhall">Valhall 架构</h3>
+<p><code>Valhall</code>有6种并行管线, 其中3种<code>arithmetic</code>管线和3种<code>fixted function support</code>管线</p>
+<ul>
+<li><code>Arithmetic fused multiply accumulate unit (FMA)</code><br />
+FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作  </li>
+</ul>
+<pre><code class="language-txt">The FMA pipelines are the main arithmetic pipelines, implementing the floating-point multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp, and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.
+</code></pre>
+<ul>
+<li><code>Arithmetic convert unit (CVT)</code><br />
+类型转换单元</li>
+</ul>
+<pre><code class="language-txt">The CVT pipelines implement simple operations, such as format conversion and integer
+addition.
+</code></pre>
+<ul>
+<li><code>Arithmetic special functions unit (SFU)</code><br />
+特殊运算单元, 用于执行倒数和<a href="https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8">超越函数</a>. </li>
+</ul>
+<pre><code class="language-txt">Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 4 clock cycles
+</code></pre>
+<ul>
+<li><code>Load/store unit (LS)</code> </li>
+<li><code>Varying unit (V)</code></li>
+<li><code>Texture unit (T)</code>  </li>
+</ul>
 <h2 id="_3">测试各项数据</h2>
 <h3 id="texture">Texture</h3>
 <p>采样9次</p>
