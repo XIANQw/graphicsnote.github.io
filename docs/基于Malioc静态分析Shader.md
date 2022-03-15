@@ -36,7 +36,7 @@ malioc -c <target_gpu> [<shader_type>] <file1> [<file2> …] [-o <file>]
 .comp OpenGL ES compute shader.
 ```
 用`-D`可以定义`Shader`中的宏来执行部分代码
-```
+```txt
 -Dfoo
 定义foo为1
 -Dfoo=bar
@@ -44,12 +44,12 @@ malioc -c <target_gpu> [<shader_type>] <file1> [<file2> …] [-o <file>]
 ```
 ## 性能分析
 执行以下命令行代码
-```
+```txt
 $ malioc.exe Unlit-test-LOD100.vert
 ```
 
 得到以下性能数据
-```
+```txt
 Mali Offline Compiler v7.4.0 (Build 330167)
 Copyright 2007-2021 Arm Limited, all rights reserved
 
@@ -100,56 +100,62 @@ Shader properties
 Has uniform computation: false
 ```
 看到`vertex shader`被分为了`Position variant`和`Varing variant`两段. 在`Bifrost`和`Valhall`架构上, `.vert`会被`Index-Driven Vertex Shading (IDVS)`管线编译成两个`binaries`
+
 - `Position shader`: 只有`position`相关计算
 - `Varying Shader`: 计算剩下的所有`vertex attribute`
 
 ![IDVS架构](img/IDVS架构.png)
 
-`Pos shader`对每一个索引顶点都会执行, `Varying shader`只对剔除后的可见图元执行, 所以这两个`shader`的数据被分开表示.\
+`Pos shader`对每一个索引顶点都会执行, `Varying shader`只对剔除后的可见图元执行, 所以这两个`shader`的数据被分开表示.  
 原文:
-```
-The position shader is executed for every index vertex, but the varying shader is only executed for
-vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate
-performance tables for each of these variants.
+```txt
+The position shader is executed for every index vertex, but the varying shader is only executed for vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate performance tables for each of these variants.
 ```
 ## Mali GPU 静态分析数据项
 ### Bifrost架构
-- `Arithmetic unit (A) `\
+- `Arithmetic unit (A)`  
   计算单元
-- `Load/store unit (LS)`\
+- `Load/store unit (LS)`  
   执行所有非Texture的内存访问, 包括buffer, image和原子操作
-- `Varying unit (V)`\
+- `Varying unit (V)`  
   执行变量插值
-- `Texture unit (T)`\
+- `Texture unit (T)`  
   执行所有纹理采样和过滤操作
 
 ![Bifrost架构](img/Bifrost架构.png)
 
 #### Work registers
 `Bifrost GPU shader core` 可以创建多个线程, 取决于正在使用的`Shader programs`的`work registers`数量
-- `0-32 registers`: Maximum thread capacity
-- `33-64 registers`: Half thread capacity
-  
+
+- `0-32 registers`:
+Maximum thread capacity
+- `33-64 registers`:
+Half thread capacity  
 所以如果比起`highp`, 尽可能使用更多的`mediump`的话就能创建更多线程来让`GPU`的负载上升从而提高性能
 
-### Valhall architecture
+### Valhall 架构
 `Valhall`有6种并行管线, 其中3种`arithmetic`管线和3种`fixted function support`管线
-1. `Arithmetic fused multiply accumulate unit (FMA)`\
-   FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作\
-   `The FMA pipelines are the main arithmetic pipelines, implementing the floating-point
-multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp,
-and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.
-`
-2. `Arithmetic convert unit (CVT)`\
-   `The CVT pipelines implement simple operations, such as format conversion and integer
-addition.`
-3. `Arithmetic special functions unit (SFU)`\
-   特殊运算单元, 用于执行倒数和超越函数. `Each SFU pipeline implements a 4-wide issue
-path, executing a 16-wide warp over 4 clock cycles`
-   ```
-   超越函数: https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8
-   ```
-4. 5.6. `Load/store unit (LS)`, `Varying unit (V)`和`Texture unit (T)`
+
+- `Arithmetic fused multiply accumulate unit (FMA)`  
+FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作  
+```txt
+The FMA pipelines are the main arithmetic pipelines, implementing the floating-point multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp, and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.
+```
+
+- `Arithmetic convert unit (CVT)`  
+类型转换单元
+```txt
+The CVT pipelines implement simple operations, such as format conversion and integer
+addition.
+```
+- `Arithmetic special functions unit (SFU)`  
+特殊运算单元, 用于执行倒数和[超越函数](https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8). 
+```txt
+Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 4 clock cycles
+```
+- `Load/store unit (LS)` 
+- `Varying unit (V)`
+- `Texture unit (T)`  
 
 
 ## 测试各项数据
