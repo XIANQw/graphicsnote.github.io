@@ -108,9 +108,8 @@ Has uniform computation: false
 
 `Pos shader`对每一个索引顶点都会执行, `Varying shader`只对剔除后的可见图元执行, 所以这两个`shader`的数据被分开表示.  
 原文:
-```txt
-The position shader is executed for every index vertex, but the varying shader is only executed for vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate performance tables for each of these variants.
-```
+>The position shader is executed for every index vertex, but the varying shader is only executed for vertices that are part of a visible primitive that survives culling. Mali Offline Compiler reports separate performance tables for each of these variants.
+
 ## Mali GPU 静态分析数据项
 ### Bifrost架构
 - `Arithmetic unit (A)`  
@@ -138,21 +137,17 @@ Half thread capacity
 
 - `Arithmetic fused multiply accumulate unit (FMA)`  
 FMA管线构建了16-wide warp, 每线程每时钟周期可以发出一个32-bit操作或者两个16bit操作  
-```txt
-The FMA pipelines are the main arithmetic pipelines, implementing the floating-point multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp, and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.
-```
+> The FMA pipelines are the main arithmetic pipelines, implementing the floating-point multipliers that are widely used in shader code. Each FMA pipeline implements a 16-wide warp, and can issue a single 32-bit operation or two 16-bit operations per thread and per clock cycle.
 
 - `Arithmetic convert unit (CVT)`  
 类型转换单元
-```txt
-The CVT pipelines implement simple operations, such as format conversion and integer
+>The CVT pipelines implement simple operations, such as format conversion and integer
 addition.
-```
+
 - `Arithmetic special functions unit (SFU)`  
 特殊运算单元, 用于执行倒数和[超越函数](https://zh.wikipedia.org/wiki/%E8%B6%85%E8%B6%8A%E5%87%BD%E6%95%B8). 
-```txt
-Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 4 clock cycles
-```
+> Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 4 clock cycles
+
 - `Load/store unit (LS)` 
 - `Varying unit (V)`
 - `Texture unit (T)`  
@@ -162,10 +157,9 @@ Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 
 ## 测试各项数据
 ### 1. 基准Shader
 以最基础的shader, 顶点只有pos和uv, 且采样一次纹理并输出结果作为基准shader. 再添加其它代码观察各项数据的变化
-<details><summary>Benchmark Shader</summary>
-<details><summary>Unity shader</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
-```cg
+```
 Shader "Unlit/benchShader"
 {
     Properties
@@ -219,12 +213,8 @@ Shader "Unlit/benchShader"
     }
 }
 
-```
-</details>
+=======================================================================
 
-<details><summary>glsl</summary>
-
-```
 #version 300 es
 
 #define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
@@ -263,6 +253,8 @@ void main()
     return;
 }
 
+==============================================================================
+
 #version 300 es
 
 precision highp float;
@@ -288,14 +280,14 @@ void main()
 
 
 ```
-</details>
+
 </details>
 
 分析结果  
 ![BenchmarkShader](img/BenchmarkShader.png)
 
 ### 2. 采样两次
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 v2f vert (appdata v)
@@ -348,7 +340,7 @@ void main()
 ![采样两次](img/采样两次.png)
 
 ### 3. 添加顶点法线
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 <!-- </details> -->
 
 ```
@@ -477,7 +469,7 @@ void main()
 2. 新增了`in highp vec3 in_NORMAL0;`和`out highp vec3 vs_TEXCOORD1`使得`LS`和`V`上升.
 
 ### 4. 添加半精度顶点法线
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 struct appdata
@@ -508,7 +500,7 @@ out mediump vec3 vs_TEXCOORD1;
 ### 两套uv
 添加第二套uv, 但不传给`Fragment shader`
 
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 struct appdata
@@ -542,7 +534,7 @@ out mediump vec2 vs_TEXCOORD0;
 appData结构体属性越多, `VAO`越大造成`LS`上升
 
 ### 5. 增大v2f不改变appData
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 struct appdata
@@ -604,7 +596,7 @@ out mediump vec4 vs_TEXCOORD3;
 
 ### 6. 合并half4
 将多个half2合并成half4
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 struct appdata
@@ -660,7 +652,7 @@ out mediump vec4 vs_TEXCOORD2;
 `appdata`合并后`LS`下降, `varying`不变
 
 ### 7. 增加多个uniform变量
-<details><summary>代码</summary>
+<details><summary><strong>代码（点击）</strong></summary>
 
 ```
 float param1;
