@@ -792,3 +792,6 @@ void main()
 - `LS`: 与顶点输入结构体的`texcoord`使用数量成正比, 即使是同样数量的texcoord, 但用`float4`和`float2`, `LS`的上升是相同的.
 - `Varying`: 与`v2f`结构体大小, shader间插值计算成正比
 - `T`: 与贴图采样次数成正比
+
+### 优化点
+1. 除了Position和Depth相关变量, 应尽可能使用`half`, `mali gpu`硬件下执行两次16bit运算和执行一次32bit运算的速度相同
