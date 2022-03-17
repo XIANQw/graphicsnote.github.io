@@ -149,6 +149,7 @@
                 <li class="third-level"><a href="#8-uniform">8. 增加多个uniform变量</a></li>
             <li class="second-level"><a href="#_4">总结</a></li>
                 
+                <li class="third-level"><a href="#_5">优化点</a></li>
     </ul>
 </div></div>
         <div class="col-md-9" role="main">
@@ -946,7 +947,11 @@ void main()
 <li><code>LS</code>: 与顶点输入结构体的<code>texcoord</code>使用数量成正比, 即使是同样数量的texcoord, 但用<code>float4</code>和<code>float2</code>, <code>LS</code>的上升是相同的.</li>
 <li><code>Varying</code>: 与<code>v2f</code>结构体大小, shader间插值计算成正比</li>
 <li><code>T</code>: 与贴图采样次数成正比</li>
-</ul></div>
+</ul>
+<h3 id="_5">优化点</h3>
+<ol>
+<li>除了Position和Depth相关变量, 应尽可能使用<code>half</code>, <code>mali gpu</code>硬件下执行两次16bit运算和执行一次32bit运算的速度相同</li>
+</ol></div>
         
         
     </div>
