@@ -497,7 +497,7 @@ out mediump vec3 vs_TEXCOORD1;
 ![半精度法线](img/添加半精度顶点法线.png)  
 改为半精度后`V`开销下降, `SFU`不变
 
-### 两套uv
+### 5. 两套uv
 添加第二套uv, 但不传给`Fragment shader`
 
 <details><summary><strong>代码（点击）</strong></summary>
@@ -533,7 +533,7 @@ out mediump vec2 vs_TEXCOORD0;
 
 appData结构体属性越多, `VAO`越大造成`LS`上升
 
-### 5. 增大v2f不改变appData
+### 6. 增大v2f不改变appData
 <details><summary><strong>代码（点击）</strong></summary>
 
 ```
@@ -594,7 +594,7 @@ out mediump vec4 vs_TEXCOORD3;
 ![增大v2f](img/增大v2f.png)  
 在`case4`的基础上, 将`v2f`增加一个`half2`和`half4`只使varying的cycles数量上升, LS不变.
 
-### 6. 合并half4
+### 7. 合并half4
 将多个half2合并成half4
 <details><summary><strong>代码（点击）</strong></summary>
 
@@ -651,7 +651,7 @@ out mediump vec4 vs_TEXCOORD2;
 ![合并uv](img/合并uv.png)  
 `appdata`合并后`LS`下降, `varying`不变
 
-### 7. 增加多个uniform变量
+### 8. 增加多个uniform变量
 <details><summary><strong>代码（点击）</strong></summary>
 
 ```
