@@ -116,9 +116,9 @@ The position shader is executed for every index vertex, but the varying shader i
 - `Arithmetic unit (A)`  
   计算单元
 - `Load/store unit (LS)`  
-  执行所有非Texture的内存访问, 包括buffer, image和原子操作
+  执行所有非Texture的内存访问, 包括buffer, image和原子操作, 受`vertex`的结构大小影响
 - `Varying unit (V)`  
-  执行变量插值
+  执行变量插值, 受`struct v2f`大小影响
 - `Texture unit (T)`  
   执行所有纹理采样和过滤操作
 
@@ -160,7 +160,7 @@ Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 
 ![Valhall架构](img/Valhall架构.png)
 
 ## 测试各项数据
-### 基准Shader
+### 1. 基准Shader
 以最基础的shader, 顶点只有pos和uv, 且采样一次纹理并输出结果作为基准shader. 再添加其它代码观察各项数据的变化
 <details><summary>Benchmark Shader</summary>
 <details><summary>Unity shader</summary>
@@ -294,7 +294,7 @@ void main()
 分析结果  
 ![BenchmarkShader](img/BenchmarkShader.png)
 
-### 采样两次
+### 2. 采样两次
 <details><summary>代码</summary>
 
 ```
@@ -347,7 +347,7 @@ void main()
 分析结果  
 ![采样两次](img/采样两次.png)
 
-### 添加顶点法线
+### 3. 添加顶点法线
 <details><summary>代码</summary>
 <!-- </details> -->
 
@@ -476,7 +476,7 @@ void main()
 1. `o.normalWorld = UnityObjectToWorldNormal(v.normal);`转换法线到世界空间后做了`normalize`, 使用了`inversesqrt`, 增加了`SFU`
 2. 新增了`in highp vec3 in_NORMAL0;`和`out highp vec3 vs_TEXCOORD1`使得`LS`和`V`上升.
 
-### 添加半精度顶点法线
+### 4. 添加半精度顶点法线
 <details><summary>代码</summary>
 
 ```
@@ -541,15 +541,16 @@ out mediump vec2 vs_TEXCOORD0;
 
 appData结构体属性越多, `VAO`越大造成`LS`上升
 
-### 增大v2f不改变appData
+### 5. 增大v2f不改变appData
 <details><summary>代码</summary>
 
 ```
 struct appdata
 {
     float4 vertex : POSITION;
-    half3 normal: NORMAL; // 顶点法线
+    half3 normal: NORMAL;
     half2 uv1 : TEXCOORD0;
+    half2 uv2 : TEXCOORD1;
 };
 
 struct v2f
@@ -558,21 +559,244 @@ struct v2f
     half3 normalWorld: TEXCOORD1;
     half2 uv1 : TEXCOORD0;
     half2 uv2 : TEXCOORD2;
-    half2 uv3 : TEXCOORD3;
-
+    half4 uv34 : TEXCOORD3;
 };
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv1 = TRANSFORM_TEX(v.uv1, _MainTex);
+    o.uv2 = TRANSFORM_TEX(v.uv2, _MainTex);;
+    o.uv34.xy = saturate(o.uv1 + 0.1);
+    o.uv34.zw = saturate(o.uv2 - 0.1);
+    o.normalWorld = UnityObjectToWorldNormal(v.normal);
+    return o;
+}
+
+fixed4 frag (v2f i) : SV_Target
+{
+    // sample the texture
+    half2 uv = (i.uv1 + i.uv2 + i.uv34.xy + i.uv34.zw) * 0.25;
+    fixed4 col = tex2D(_MainTex, uv);
+    col.r = i.normalWorld.x;
+    return col;
+}
 ======================================
-in highp vec4 in_POSITION0;
 in mediump vec3 in_NORMAL0;
 in mediump vec2 in_TEXCOORD0;
+in mediump vec2 in_TEXCOORD1;
 out mediump vec3 vs_TEXCOORD1;
 out mediump vec2 vs_TEXCOORD0;
 out mediump vec2 vs_TEXCOORD2;
-out mediump vec2 vs_TEXCOORD3;
+out mediump vec4 vs_TEXCOORD3;
+
 
 ```
 </details>
 
 分析结果  
-![增大v2f](img/增大v2f.png)
-LS大小并未改变, v2f增大只改变varying的cycles数量.
+![增大v2f](img/增大v2f.png)  
+在`case4`的基础上, 将`v2f`增加一个`half2`和`half4`只使varying的cycles数量上升, LS不变.
+
+### 6. 合并half4
+将多个half2合并成half4
+<details><summary>代码</summary>
+
+```
+struct appdata
+{
+    float4 vertex : POSITION;
+    half3 normal: NORMAL;
+    half4 uv12 : TEXCOORD0;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    half3 normalWorld: TEXCOORD1;
+    half4 uv12 : TEXCOORD0;
+    half4 uv34 : TEXCOORD2;
+};
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv12.xy = TRANSFORM_TEX(v.uv12.xy, _MainTex);
+    o.uv12.zw = TRANSFORM_TEX(v.uv12.zw, _MainTex);;
+    o.uv34.xy = saturate(o.uv12.xy + 0.1);
+    o.uv34.zw = saturate(o.uv12.zw - 0.1);
+    o.normalWorld = UnityObjectToWorldNormal(v.normal);
+    return o;
+}
+
+fixed4 frag (v2f i) : SV_Target
+{
+    // sample the texture
+    half2 uv = (i.uv12.xy + i.uv12.zw + i.uv34.xy + i.uv34.zw) * 0.25;
+    fixed4 col = tex2D(_MainTex, uv);
+    col.r = i.normalWorld.x;
+    return col;
+}
+============================================
+in mediump vec3 in_NORMAL0;
+in mediump vec4 in_TEXCOORD0;
+out mediump vec3 vs_TEXCOORD1;
+out mediump vec4 vs_TEXCOORD0;
+out mediump vec4 vs_TEXCOORD2;
+
+```
+</details>
+
+分析结果  
+![合并uv](img/合并uv.png)  
+`appdata`合并后`LS`下降, `varying`不变
+
+### 7. 增加多个uniform变量
+<details><summary>代码</summary>
+
+```
+float param1;
+float param2;
+float param3;
+float param4;
+float param5;
+float param6;
+
+struct appdata
+{
+    float4 vertex : POSITION;
+    half3 normal: NORMAL;
+    half4 uv12 : TEXCOORD0;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    half3 normalWorld: TEXCOORD1;
+    half4 uv12 : TEXCOORD0;
+    half4 uv34 : TEXCOORD2;
+};
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    float param = (param1+param2+param3+param4+param5+param6) / 6.0;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv12.xy = TRANSFORM_TEX(v.uv12.xy, _MainTex);
+    o.uv12.zw = TRANSFORM_TEX(v.uv12.zw, _MainTex);;
+    o.uv34.xy = saturate(o.uv12.xy + param);
+    o.uv34.zw = saturate(o.uv12.zw - 0.1);
+    o.normalWorld = UnityObjectToWorldNormal(v.normal);
+    return o;
+}
+
+fixed4 frag (v2f i) : SV_Target
+{
+    // sample the texture
+    half2 uv = (i.uv12.xy + i.uv12.zw + i.uv34.xy + i.uv34.zw) * 0.25;
+    fixed4 col = tex2D(_MainTex, uv);
+    col.r = i.normalWorld.x;
+    return col;
+}
+=========================================================================
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform 	vec4 hlslcc_mtx4x4unity_WorldToObject[4];
+uniform 	vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform 	float param1;
+uniform 	float param2;
+uniform 	float param3;
+uniform 	float param4;
+uniform 	float param5;
+uniform 	float param6;
+uniform 	vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in mediump vec3 in_NORMAL0;
+in mediump vec4 in_TEXCOORD0;
+out mediump vec3 vs_TEXCOORD1;
+out mediump vec4 vs_TEXCOORD0;
+out mediump vec4 vs_TEXCOORD2;
+vec4 u_xlat0;
+vec4 u_xlat1;
+float u_xlat6;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    gl_Position = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    u_xlat0.x = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[0].xyz);
+    u_xlat0.y = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[1].xyz);
+    u_xlat0.z = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[2].xyz);
+    u_xlat6 = dot(u_xlat0.xyz, u_xlat0.xyz);
+    u_xlat6 = inversesqrt(u_xlat6);
+    u_xlat0.xyz = vec3(u_xlat6) * u_xlat0.xyz;
+    vs_TEXCOORD1.xyz = u_xlat0.xyz;
+    u_xlat0 = in_TEXCOORD0 * _MainTex_ST.xyxy + _MainTex_ST.zwzw;
+    vs_TEXCOORD0 = u_xlat0;
+    u_xlat1.x = param2 + param1;
+    u_xlat1.x = u_xlat1.x + param3;
+    u_xlat1.x = u_xlat1.x + param4;
+    u_xlat1.x = u_xlat1.x + param5;
+    u_xlat1.x = u_xlat1.x + param6;
+    u_xlat0.xy = u_xlat1.xx * vec2(0.166666672, 0.166666672) + u_xlat0.xy;
+#ifdef UNITY_ADRENO_ES3
+    u_xlat0.xy = min(max(u_xlat0.xy, 0.0), 1.0);
+#else
+    u_xlat0.xy = clamp(u_xlat0.xy, 0.0, 1.0);
+#endif
+    vs_TEXCOORD2.zw = u_xlat0.zw + vec2(-0.100000001, -0.100000001);
+#ifdef UNITY_ADRENO_ES3
+    vs_TEXCOORD2.zw = min(max(vs_TEXCOORD2.zw, 0.0), 1.0);
+#else
+    vs_TEXCOORD2.zw = clamp(vs_TEXCOORD2.zw, 0.0, 1.0);
+#endif
+    vs_TEXCOORD2.xy = u_xlat0.xy;
+    return;
+}
+
+```
+</details>
+
+分析结果  
+![添加uniform变量](img/增加Uniform.png)  
+添加`Uniform`不影响`LS`
+
+
+## 总结
+- `FMA`: 与加减乘除计算操作数成正比
+- `CVT`: 与不同类型间计算数量成正比
+- `SFU`: 与`inversesqrt`, `sqrt`, `normalize`等计算函数使用数量成正比
+- `LS`: 与顶点输入结构体的`texcoord`使用数量成正比, 即使是同样数量的texcoord, 但用`float4`和`float2`, `LS`的上升是相同的.
+- `Varying`: 与`v2f`结构体大小, shader间插值计算成正比
+- `T`: 与贴图采样次数成正比
