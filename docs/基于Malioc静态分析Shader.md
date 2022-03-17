@@ -157,12 +157,165 @@ Each SFU pipeline implements a 4-wide issue path, executing a 16-wide warp over 
 - `Varying unit (V)`
 - `Texture unit (T)`  
 
+![Valhall架构](img/Valhall架构.png)
 
 ## 测试各项数据
-### Texture
+### 基准Shader
+以最基础的shader, 顶点只有pos和uv, 且采样一次纹理并输出结果作为基准shader. 再添加其它代码观察各项数据的变化
+<details><summary>Benchmark Shader</summary>
+<details><summary>Unity shader</summary>
 
-采样9次
+```cg
+Shader "Unlit/benchShader"
+{
+    Properties
+    {
+        _MainTex ("Texture", 2D) = "white" {}
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Opaque" }
+        LOD 100
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float4 vertex : SV_POSITION;
+            };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                // sample the texture
+                fixed4 col = tex2D(_MainTex, i.uv);
+                return col;
+            }
+            ENDCG
+        }
+    }
+}
+
 ```
+</details>
+
+<details><summary>glsl</summary>
+
+```
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform 	vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform 	vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec2 in_TEXCOORD0;
+out highp vec2 vs_TEXCOORD0;
+vec4 u_xlat0;
+vec4 u_xlat1;
+void main()
+{
+    vs_TEXCOORD0.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    gl_Position = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    return;
+}
+
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+mediump vec4 u_xlat16_0;
+void main()
+{
+    u_xlat16_0 = texture(_MainTex, vs_TEXCOORD0.xy);
+    SV_Target0 = u_xlat16_0;
+    return;
+}
+
+
+```
+</details>
+</details>
+
+分析结果  
+![BenchmarkShader](img/BenchmarkShader.png)
+
+### 采样两次
+<details><summary>代码</summary>
+
+```
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    return o;
+}
+
+fixed4 frag (v2f i) : SV_Target
+{
+    // sample the texture
+    fixed4 col = tex2D(_MainTex, i.uv);
+    col.rg = tex2D(_MainTex, i.uv + float2(0, 1));
+    return col;
+}
+
+===========================================================
+
 #version 300 es
 
 precision highp float;
@@ -179,40 +332,247 @@ UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
 in highp vec2 vs_TEXCOORD0;
 layout(location = 0) out mediump vec4 SV_Target0;
 vec4 u_xlat0;
-mediump vec4 u_xlat16_0;
-vec4 u_xlat1;
-mediump vec4 u_xlat16_1;
-mediump vec4 u_xlat16_2;
 void main()
 {
-    u_xlat0 = vs_TEXCOORD0.xyxy + vec4(-1.0, 1.0, 0.0, 1.0);
-    u_xlat16_1 = texture(_MainTex, u_xlat0.xy);
-    u_xlat16_0 = texture(_MainTex, u_xlat0.zw);
-    u_xlat0 = u_xlat16_0 + u_xlat16_1;
-    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(1.0, 1.0, -1.0, 0.0);
-    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
-    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
-    u_xlat0 = u_xlat0 + u_xlat16_2;
-    u_xlat0 = u_xlat16_1 + u_xlat0;
-    u_xlat16_1 = texture(_MainTex, vs_TEXCOORD0.xy);
-    u_xlat0 = u_xlat0 + u_xlat16_1;
-    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(1.0, 0.0, -1.0, -1.0);
-    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
-    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
-    u_xlat0 = u_xlat0 + u_xlat16_2;
-    u_xlat0 = u_xlat16_1 + u_xlat0;
-    u_xlat1 = vs_TEXCOORD0.xyxy + vec4(0.0, -1.0, 1.0, -1.0);
-    u_xlat16_2 = texture(_MainTex, u_xlat1.xy);
-    u_xlat16_1 = texture(_MainTex, u_xlat1.zw);
-    u_xlat0 = u_xlat0 + u_xlat16_2;
-    u_xlat0 = u_xlat16_1 + u_xlat0;
-    SV_Target0 = u_xlat0 * vec4(0.111111112, 0.111111112, 0.111111112, 0.111111112);
+    u_xlat0.xy = vs_TEXCOORD0.xy + vec2(0.0, 1.0);
+    u_xlat0.xy = texture(_MainTex, u_xlat0.xy).xy;
+    u_xlat0.zw = texture(_MainTex, vs_TEXCOORD0.xy).zw;
+    SV_Target0 = u_xlat0;
     return;
 }
 
 ```
-分析结果
+</details>
 
-![采样9次分析结果](img/采样10次.png)
+分析结果  
+![采样两次](img/采样两次.png)
 
-### Load & Store
+### 添加顶点法线
+<details><summary>代码</summary>
+<!-- </details> -->
+
+```
+struct appdata
+{
+    float4 vertex : POSITION;
+    float3 normal: NORMAL; // 顶点法线
+    float2 uv1 : TEXCOORD0;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    float3 normalWorld: TEXCOORD1;
+    float2 uv1 : TEXCOORD0;
+};
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv1 = TRANSFORM_TEX(v.uv1, _MainTex);
+    o.normalWorld = UnityObjectToWorldNormal(v.normal);
+    return o;
+}
+
+fixed4 frag (v2f i) : SV_Target
+{
+    // sample the texture
+    half2 uv = i.uv1;
+    fixed4 col = tex2D(_MainTex, uv);
+    col.rg = i.normalWorld.xy;
+    return col;
+}
+===============================================================
+
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform 	vec4 hlslcc_mtx4x4unity_WorldToObject[4];
+uniform 	vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform 	vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec3 in_NORMAL0;
+in highp vec2 in_TEXCOORD0;
+out highp vec3 vs_TEXCOORD1;
+out highp vec2 vs_TEXCOORD0;
+vec4 u_xlat0;
+vec4 u_xlat1;
+float u_xlat6;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    gl_Position = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    u_xlat0.x = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[0].xyz);
+    u_xlat0.y = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[1].xyz);
+    u_xlat0.z = dot(in_NORMAL0.xyz, hlslcc_mtx4x4unity_WorldToObject[2].xyz);
+    u_xlat6 = dot(u_xlat0.xyz, u_xlat0.xyz);
+    u_xlat6 = inversesqrt(u_xlat6);
+    vs_TEXCOORD1.xyz = vec3(u_xlat6) * u_xlat0.xyz;
+    vs_TEXCOORD0.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    return;
+}
+
+
+
+===========================================================================
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec3 vs_TEXCOORD1;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+vec4 u_xlat0;
+void main()
+{
+    u_xlat0.zw = texture(_MainTex, vs_TEXCOORD0.xy).zw;
+    u_xlat0.xy = vs_TEXCOORD1.xy;
+    SV_Target0 = u_xlat0;
+    return;
+}
+
+
+
+
+```
+</details>
+
+分析结果  
+![顶点法线](img/添加顶点法线1.png)
+
+1. `o.normalWorld = UnityObjectToWorldNormal(v.normal);`转换法线到世界空间后做了`normalize`, 使用了`inversesqrt`, 增加了`SFU`
+2. 新增了`in highp vec3 in_NORMAL0;`和`out highp vec3 vs_TEXCOORD1`使得`LS`和`V`上升.
+
+### 添加半精度顶点法线
+<details><summary>代码</summary>
+
+```
+struct appdata
+{
+    float4 vertex : POSITION;
+    half3 normal: NORMAL;
+    float2 uv : TEXCOORD0;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    half3 normalWorld: TEXCOORD1;
+    float2 uv : TEXCOORD0;
+};
+====================================
+in mediump vec3 in_NORMAL0;
+out mediump vec3 vs_TEXCOORD1;
+
+```
+
+</details>
+
+分析结果  
+![半精度法线](img/添加半精度顶点法线.png)  
+改为半精度后`V`开销下降, `SFU`不变
+
+### 两套uv
+添加第二套uv, 但不传给`Fragment shader`
+
+<details><summary>代码</summary>
+
+```
+struct appdata
+{
+    float4 vertex : POSITION;
+    half3 normal: NORMAL;
+    half2 uv1 : TEXCOORD0;
+    half2 uv2 : TEXCOORD1;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    half3 normalWorld: TEXCOORD1;
+    half2 uv1 : TEXCOORD0;
+};
+====================================
+in mediump vec3 in_NORMAL0;
+in mediump vec2 in_TEXCOORD0;
+in mediump vec2 in_TEXCOORD1;
+out mediump vec3 vs_TEXCOORD1;
+out mediump vec2 vs_TEXCOORD0;
+
+```
+
+</details>
+
+分析结果  
+![2uv](img/2UV.png)
+
+appData结构体属性越多, `VAO`越大造成`LS`上升
+
+### 增大v2f不改变appData
+<details><summary>代码</summary>
+
+```
+struct appdata
+{
+    float4 vertex : POSITION;
+    half3 normal: NORMAL; // 顶点法线
+    half2 uv1 : TEXCOORD0;
+};
+
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    half3 normalWorld: TEXCOORD1;
+    half2 uv1 : TEXCOORD0;
+    half2 uv2 : TEXCOORD2;
+    half2 uv3 : TEXCOORD3;
+
+};
+======================================
+in highp vec4 in_POSITION0;
+in mediump vec3 in_NORMAL0;
+in mediump vec2 in_TEXCOORD0;
+out mediump vec3 vs_TEXCOORD1;
+out mediump vec2 vs_TEXCOORD0;
+out mediump vec2 vs_TEXCOORD2;
+out mediump vec2 vs_TEXCOORD3;
+
+```
+</details>
+
+分析结果  
+![增大v2f](img/增大v2f.png)
+LS大小并未改变, v2f增大只改变varying的cycles数量.
