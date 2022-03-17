@@ -143,10 +143,10 @@
                 <li class="third-level"><a href="#2">2. 采样两次</a></li>
                 <li class="third-level"><a href="#3">3. 添加顶点法线</a></li>
                 <li class="third-level"><a href="#4">4. 添加半精度顶点法线</a></li>
-                <li class="third-level"><a href="#uv">两套uv</a></li>
-                <li class="third-level"><a href="#5-v2fappdata">5. 增大v2f不改变appData</a></li>
-                <li class="third-level"><a href="#6-half4">6. 合并half4</a></li>
-                <li class="third-level"><a href="#7-uniform">7. 增加多个uniform变量</a></li>
+                <li class="third-level"><a href="#5-uv">5. 两套uv</a></li>
+                <li class="third-level"><a href="#6-v2fappdata">6. 增大v2f不改变appData</a></li>
+                <li class="third-level"><a href="#7-half4">7. 合并half4</a></li>
+                <li class="third-level"><a href="#8-uniform">8. 增加多个uniform变量</a></li>
             <li class="second-level"><a href="#_4">总结</a></li>
                 
     </ul>
@@ -653,7 +653,7 @@ out mediump vec3 vs_TEXCOORD1;
 <p>分析结果<br />
 <img alt="半精度法线" src="../img/%E6%B7%BB%E5%8A%A0%E5%8D%8A%E7%B2%BE%E5%BA%A6%E9%A1%B6%E7%82%B9%E6%B3%95%E7%BA%BF.png" /><br />
 改为半精度后<code>V</code>开销下降, <code>SFU</code>不变</p>
-<h3 id="uv">两套uv</h3>
+<h3 id="5-uv">5. 两套uv</h3>
 <p>添加第二套uv, 但不传给<code>Fragment shader</code></p>
 <details><summary><strong>代码（点击）</strong></summary>
 
@@ -687,7 +687,7 @@ out mediump vec2 vs_TEXCOORD0;
 <p>分析结果<br />
 <img alt="2uv" src="../img/2UV.png" /></p>
 <p>appData结构体属性越多, <code>VAO</code>越大造成<code>LS</code>上升</p>
-<h3 id="5-v2fappdata">5. 增大v2f不改变appData</h3>
+<h3 id="6-v2fappdata">6. 增大v2f不改变appData</h3>
 <details><summary><strong>代码（点击）</strong></summary>
 
 
@@ -748,7 +748,7 @@ out mediump vec4 vs_TEXCOORD3;
 <p>分析结果<br />
 <img alt="增大v2f" src="../img/%E5%A2%9E%E5%A4%A7v2f.png" /><br />
 在<code>case4</code>的基础上, 将<code>v2f</code>增加一个<code>half2</code>和<code>half4</code>只使varying的cycles数量上升, LS不变.</p>
-<h3 id="6-half4">6. 合并half4</h3>
+<h3 id="7-half4">7. 合并half4</h3>
 <p>将多个half2合并成half4</p>
 <details><summary><strong>代码（点击）</strong></summary>
 
@@ -805,7 +805,7 @@ out mediump vec4 vs_TEXCOORD2;
 <p>分析结果<br />
 <img alt="合并uv" src="../img/%E5%90%88%E5%B9%B6uv.png" /><br />
 <code>appdata</code>合并后<code>LS</code>下降, <code>varying</code>不变</p>
-<h3 id="7-uniform">7. 增加多个uniform变量</h3>
+<h3 id="8-uniform">8. 增加多个uniform变量</h3>
 <details><summary><strong>代码（点击）</strong></summary>
 
 
