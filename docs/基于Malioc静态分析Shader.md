@@ -784,6 +784,126 @@ void main()
 ![添加uniform变量](img/增加Uniform.png)  
 添加`Uniform`不影响`LS`
 
+### CVT的实验对照
+对`CVT`描述的的`integer addition`操作也会导致其上升抱有疑问, 做一组实验对照
+#### 对照组1: 在基准shader的frag中添加int临时变量, 执行integer addition后赋值到输出
+<details><summary>代码（点击）</summary>
+
+```
+
+int paramsx;
+fixed4 frag (v2f i) : SV_Target
+{
+    fixed4 col = tex2D(_MainTex, i.uv);
+    int tmp = 0;
+    tmp += paramsx;
+    col.a = saturate(tmp);
+    return col;
+}
+
+==================Fragment===================
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	int paramsx;
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+vec4 u_xlat0;
+float u_xlat3;
+void main()
+{
+    u_xlat3 = float(paramsx);
+    u_xlat0.w = u_xlat3;
+#ifdef UNITY_ADRENO_ES3
+    u_xlat0.w = min(max(u_xlat0.w, 0.0), 1.0);
+#else
+    u_xlat0.w = clamp(u_xlat0.w, 0.0, 1.0);
+#endif
+    u_xlat0.xyz = texture(_MainTex, vs_TEXCOORD0.xy).xyz;
+    SV_Target0 = u_xlat0;
+    return;
+}
+
+```
+</details>
+
+分析结果  
+![intadd1](img/intAdd1.png)
+
+#### 对照组2: 在基准shader的frag中对输出结果col直接执行Integer add
+<details><summary>代码（点击）</summary>
+
+```
+
+int paramsx;
+fixed4 frag (v2f i) : SV_Target
+{
+    float4 col = tex2D(_MainTex, i.uv);
+    return col;
+}
+
+==================Fragment===================
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	int paramsx;
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+mediump float u_xlat16_0;
+mediump vec4 u_xlat16_1;
+void main()
+{
+    u_xlat16_0 = float(paramsx);
+    u_xlat16_1 = texture(_MainTex, vs_TEXCOORD0.xy);
+    SV_Target0.w = u_xlat16_0 + u_xlat16_1.w;
+#ifdef UNITY_ADRENO_ES3
+    SV_Target0.w = min(max(SV_Target0.w, 0.0), 1.0);
+#else
+    SV_Target0.w = clamp(SV_Target0.w, 0.0, 1.0);
+#endif
+    SV_Target0.xyz = u_xlat16_1.xyz;
+    return;
+}
+
+```
+</details>
+
+分析结果  
+![intAdd2](img/intAdd2.png)  
+1. 对比基准`shader`并没有上升, 为了排除是加法次数太少造成的误差, 做了一组24次`integer addition`的对照结果也是相同的. 所以`Integer addtion`操作数并不会带来`CVT`上升. 
+2. `int`->`float`的转换也不会带来`CVT`的明显上升, 如果有4的倍数的int, 编译器会将`int`组装成`ivec4`再转换成`vec4`, 基本无开销. 但是如果按`对照组1`使用了`int`临时变量, 那么会占用一个高精度的`register`, 然后在赋值给`col`时进行了`highp -> medium`的转换导致`CVT`上升.
 
 ## 总结
 - `FMA`: 与加减乘除计算操作数成正比
