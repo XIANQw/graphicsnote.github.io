@@ -992,6 +992,98 @@ o.params.xy = o.vertex.xy * o.uv;
 ![增大v2f2](img/增大v2f2.png)  
 `LS`上升`2 cycles`, 如果将`params`改为`half4`则只上升`1 cycles`. 由于`IDVS`架构将`vertex shader`分成了`varying shader`和`position shader`, 如果在`varying shader`的变量计算中使用了`position shader`的变量则会造成`LS`上升.
 
+#### 实验组3: v2f增加多个`vertex`参与计算的变量
+<details><summary>代码（点击）</summary>
+
+```
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 params : TEXCOORD1;
+    float4 params1 : TEXCOORD2;
+    float4 params2 : TEXCOORD3;
+    float4 params3 : TEXCOORD4;
+    float4 params4 : TEXCOORD5;
+    float4 params5 : TEXCOORD6;
+};
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    o.params.xy = o.vertex.xy * o.uv;
+    o.params1.xy = o.params.xy;
+    o.params2.xy = o.params.xy;
+    o.params3.xy = o.params.xy;
+    o.params4.xy = o.params.xy;
+    o.params5.xy = o.params.xy;
+    return o;
+}
+
+============================================
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform 	vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform 	vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec2 in_TEXCOORD0;
+out highp vec2 vs_TEXCOORD0;
+out highp vec4 vs_TEXCOORD1;
+out highp vec4 vs_TEXCOORD2;
+out highp vec4 vs_TEXCOORD3;
+out highp vec4 vs_TEXCOORD4;
+out highp vec4 vs_TEXCOORD5;
+out highp vec4 vs_TEXCOORD6;
+vec4 u_xlat0;
+vec4 u_xlat1;
+vec2 u_xlat4;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    u_xlat0 = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    gl_Position = u_xlat0;
+    u_xlat4.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    vs_TEXCOORD0.xy = u_xlat4.xy;
+    u_xlat0.xy = u_xlat4.xy * u_xlat0.xy;
+    vs_TEXCOORD1.xy = u_xlat0.xy;
+    vs_TEXCOORD2.xy = u_xlat0.xy;
+    vs_TEXCOORD3.xy = u_xlat0.xy;
+    vs_TEXCOORD4.xy = u_xlat0.xy;
+    vs_TEXCOORD5.xy = u_xlat0.xy;
+    vs_TEXCOORD6.xy = u_xlat0.xy;
+    return;
+}
+
+```
+</details>
+
+分析结果  
+![增大v2f3](img/增大v2f3.png)  
+`o.vertex.xy`只参与一次计算, 并把结果保存在`o.params`中, 其它`params`使用了该值同样会使`LS`上升
+
 
 ## 总结
 - `FMA`: 与加减乘除计算操作数成正比
