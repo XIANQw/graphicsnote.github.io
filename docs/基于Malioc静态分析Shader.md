@@ -905,13 +905,102 @@ void main()
 1. 对比基准`shader`并没有上升, 为了排除是加法次数太少造成的误差, 做了一组24次`integer addition`的对照结果也是相同的. 所以`Integer addtion`操作数并不会带来`CVT`上升. 
 2. `int`->`float`的转换也不会带来`CVT`的明显上升, 如果有4的倍数的int, 编译器会将`int`组装成`ivec4`再转换成`vec4`, 基本无开销. 但是如果按`对照组1`使用了`int`临时变量, 那么会占用一个高精度的`register`, 然后在赋值给`col`时进行了`highp -> medium`的转换导致`CVT`上升.
 
+
+### LS的进一步分析
+#### 实验组1: 基准shader中的`v2f`添加`float4 params`
+`params`只使用`uv`计算
+
+<details><summary>代码（点击）</summary>
+
+```
+struct v2f
+{
+    float4 vertex : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 params : TEXCOORD1;
+};
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    o.params.xy = o.uv * o.uv;
+    return o;
+}
+
+==================Fragment===================
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform 	vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform 	vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform 	vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec2 in_TEXCOORD0;
+out highp vec2 vs_TEXCOORD0;
+out mediump vec4 vs_TEXCOORD1;
+vec4 u_xlat0;
+vec4 u_xlat1;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    gl_Position = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    u_xlat0.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    vs_TEXCOORD0.xy = u_xlat0.xy;
+    u_xlat0.xy = u_xlat0.xy * u_xlat0.xy;
+    vs_TEXCOORD1.xy = u_xlat0.xy;
+    return;
+}
+
+
+
+```
+</details>
+
+分析结果  
+![增大v2f1](img/增大v2f1.png)  
+`LS`并无变化
+
+#### 实验组2: `vertex`参与`params`计算
+```
+o.params.xy = o.vertex.xy * o.uv;
+```
+分析结果  
+![增大v2f2](img/增大v2f2.png)  
+`LS`上升`2 cycles`, 如果将`params`改为`half4`则只上升`1 cycles`. 由于`IDVS`架构将`vertex shader`分成了`varying shader`和`position shader`, 如果在`varying shader`的变量计算中使用了`position shader`的变量则会造成`LS`上升.
+
+
 ## 总结
 - `FMA`: 与加减乘除计算操作数成正比
 - `CVT`: 与不同类型间计算数量成正比
 - `SFU`: 与`inversesqrt`, `sqrt`, `normalize`等计算函数使用数量成正比
-- `LS`: 与顶点输入结构体的`texcoord`使用数量成正比, 即使是同样数量的texcoord, 但用`float4`和`float2`, `LS`的上升是相同的.
+- `LS`: 与顶点输入结构体的`texcoord`使用数量成正比, 即使是同样数量的texcoord, 但用`float4`和`float2`, `LS`的上升是相同的. 此外`LS`还与`v2f`中由`vertex`参与计算的变量数成正比.
 - `Varying`: 与`v2f`结构体大小, shader间插值计算成正比
 - `T`: 与贴图采样次数成正比
+
 
 ### 优化点
 1. 除了Position和Depth相关变量, 应尽可能使用`half`, `mali gpu`硬件下执行两次16bit运算和执行一次32bit运算的速度相同
