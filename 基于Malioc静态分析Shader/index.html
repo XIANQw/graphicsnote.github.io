@@ -147,6 +147,8 @@
                 <li class="third-level"><a href="#6-v2fappdata">6. 增大v2f不改变appData</a></li>
                 <li class="third-level"><a href="#7-half4">7. 合并half4</a></li>
                 <li class="third-level"><a href="#8-uniform">8. 增加多个uniform变量</a></li>
+                <li class="third-level"><a href="#cvt">CVT的实验对照</a></li>
+                <li class="third-level"><a href="#ls">LS的进一步分析</a></li>
             <li class="second-level"><a href="#_4">总结</a></li>
                 
                 <li class="third-level"><a href="#_5">优化点</a></li>
@@ -939,12 +941,308 @@ void main()
 <p>分析结果<br />
 <img alt="添加uniform变量" src="../img/%E5%A2%9E%E5%8A%A0Uniform.png" /><br />
 添加<code>Uniform</code>不影响<code>LS</code></p>
+<h3 id="cvt">CVT的实验对照</h3>
+<p>对<code>CVT</code>描述的的<code>integer addition</code>操作也会导致其上升抱有疑问, 做一组实验对照</p>
+<h4 id="1-shaderfragint-integer-addition">对照组1: 在基准shader的frag中添加int临时变量, 执行integer addition后赋值到输出</h4>
+<details><summary><strong>代码（点击）</strong></summary>
+
+
+<pre><code>
+int paramsx;
+fixed4 frag (v2f i) : SV_Target
+{
+    fixed4 col = tex2D(_MainTex, i.uv);
+    int tmp = 0;
+    tmp += paramsx;
+    col.a = saturate(tmp);
+    return col;
+}
+
+==================Fragment===================
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform     int paramsx;
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+vec4 u_xlat0;
+float u_xlat3;
+void main()
+{
+    u_xlat3 = float(paramsx);
+    u_xlat0.w = u_xlat3;
+#ifdef UNITY_ADRENO_ES3
+    u_xlat0.w = min(max(u_xlat0.w, 0.0), 1.0);
+#else
+    u_xlat0.w = clamp(u_xlat0.w, 0.0, 1.0);
+#endif
+    u_xlat0.xyz = texture(_MainTex, vs_TEXCOORD0.xy).xyz;
+    SV_Target0 = u_xlat0;
+    return;
+}
+
+</code></pre>
+
+</details>
+
+<p>分析结果<br />
+<img alt="intadd1" src="../img/intAdd1.png" /></p>
+<h4 id="2-shaderfragcolinteger-add">对照组2: 在基准shader的frag中对输出结果col直接执行Integer add</h4>
+<details><summary><strong>代码（点击）</strong></summary>
+
+
+<pre><code>
+int paramsx;
+fixed4 frag (v2f i) : SV_Target
+{
+    float4 col = tex2D(_MainTex, i.uv);
+    return col;
+}
+
+==================Fragment===================
+#version 300 es
+
+precision highp float;
+precision highp int;
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform     int paramsx;
+UNITY_LOCATION(0) uniform mediump sampler2D _MainTex;
+in highp vec2 vs_TEXCOORD0;
+layout(location = 0) out mediump vec4 SV_Target0;
+mediump float u_xlat16_0;
+mediump vec4 u_xlat16_1;
+void main()
+{
+    u_xlat16_0 = float(paramsx);
+    u_xlat16_1 = texture(_MainTex, vs_TEXCOORD0.xy);
+    SV_Target0.w = u_xlat16_0 + u_xlat16_1.w;
+#ifdef UNITY_ADRENO_ES3
+    SV_Target0.w = min(max(SV_Target0.w, 0.0), 1.0);
+#else
+    SV_Target0.w = clamp(SV_Target0.w, 0.0, 1.0);
+#endif
+    SV_Target0.xyz = u_xlat16_1.xyz;
+    return;
+}
+
+</code></pre>
+
+</details>
+
+<p>分析结果<br />
+<img alt="intAdd2" src="../img/intAdd2.png" /><br />
+1. 对比基准<code>shader</code>并没有上升, 为了排除是加法次数太少造成的误差, 做了一组24次<code>integer addition</code>的对照结果也是相同的. 所以<code>Integer addtion</code>操作数并不会带来<code>CVT</code>上升. 
+2. <code>int</code>-&gt;<code>float</code>的转换也不会带来<code>CVT</code>的明显上升, 如果有4的倍数的int, 编译器会将<code>int</code>组装成<code>ivec4</code>再转换成<code>vec4</code>, 基本无开销. 但是如果按<code>对照组1</code>使用了<code>int</code>临时变量, 那么会占用一个高精度的<code>register</code>, 然后在赋值给<code>col</code>时进行了<code>highp -&gt; medium</code>的转换导致<code>CVT</code>上升.</p>
+<h3 id="ls">LS的进一步分析</h3>
+<h4 id="1-shaderv2ffloat4-params">实验组1: 基准shader中的<code>v2f</code>添加<code>float4 params</code></h4>
+<p><code>params</code>只使用<code>uv</code>计算</p>
+<details><summary><strong>代码（点击）</strong></summary>
+
+
+<pre><code>struct v2f
+{
+    float4 vertex : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 params : TEXCOORD1;
+};
+
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    o.params.xy = o.uv * o.uv;
+    return o;
+}
+
+==================Fragment===================
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform     vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform     vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform     vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec2 in_TEXCOORD0;
+out highp vec2 vs_TEXCOORD0;
+out mediump vec4 vs_TEXCOORD1;
+vec4 u_xlat0;
+vec4 u_xlat1;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    gl_Position = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    u_xlat0.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    vs_TEXCOORD0.xy = u_xlat0.xy;
+    u_xlat0.xy = u_xlat0.xy * u_xlat0.xy;
+    vs_TEXCOORD1.xy = u_xlat0.xy;
+    return;
+}
+
+
+
+</code></pre>
+
+</details>
+
+<p>分析结果<br />
+<img alt="增大v2f1" src="../img/%E5%A2%9E%E5%A4%A7v2f1.png" /><br />
+<code>LS</code>并无变化</p>
+<h4 id="2-vertexparams">实验组2: <code>vertex</code>参与<code>params</code>计算</h4>
+<pre><code>o.params.xy = o.vertex.xy * o.uv;
+</code></pre>
+<p>分析结果<br />
+<img alt="增大v2f2" src="../img/%E5%A2%9E%E5%A4%A7v2f2.png" /><br />
+<code>LS</code>上升<code>2 cycles</code>, 如果将<code>params</code>改为<code>half4</code>则只上升<code>1 cycles</code>. 由于<code>IDVS</code>架构将<code>vertex shader</code>分成了<code>varying shader</code>和<code>position shader</code>, 如果在<code>varying shader</code>的变量计算中使用了<code>position shader</code>的变量则会造成<code>LS</code>上升.</p>
+<h4 id="3-v2fvertex">实验组3: v2f增加多个<code>vertex</code>参与计算的变量</h4>
+<details><summary><strong>代码（点击）</strong></summary>
+
+
+<pre><code>struct v2f
+{
+    float4 vertex : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 params : TEXCOORD1;
+    float4 params1 : TEXCOORD2;
+    float4 params2 : TEXCOORD3;
+    float4 params3 : TEXCOORD4;
+    float4 params4 : TEXCOORD5;
+    float4 params5 : TEXCOORD6;
+};
+
+v2f vert (appdata v)
+{
+    v2f o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    o.params.xy = o.vertex.xy * o.uv;
+    o.params1.xy = o.params.xy;
+    o.params2.xy = o.params.xy;
+    o.params3.xy = o.params.xy;
+    o.params4.xy = o.params.xy;
+    o.params5.xy = o.params.xy;
+    return o;
+}
+
+============================================
+#version 300 es
+
+#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
+#if HLSLCC_ENABLE_UNIFORM_BUFFERS
+#define UNITY_UNIFORM
+#else
+#define UNITY_UNIFORM uniform
+#endif
+#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
+#if UNITY_SUPPORTS_UNIFORM_LOCATION
+#define UNITY_LOCATION(x) layout(location = x)
+#define UNITY_BINDING(x) layout(binding = x, std140)
+#else
+#define UNITY_LOCATION(x)
+#define UNITY_BINDING(x) layout(std140)
+#endif
+uniform     vec4 hlslcc_mtx4x4unity_ObjectToWorld[4];
+uniform     vec4 hlslcc_mtx4x4unity_MatrixVP[4];
+uniform     vec4 _MainTex_ST;
+in highp vec4 in_POSITION0;
+in highp vec2 in_TEXCOORD0;
+out highp vec2 vs_TEXCOORD0;
+out highp vec4 vs_TEXCOORD1;
+out highp vec4 vs_TEXCOORD2;
+out highp vec4 vs_TEXCOORD3;
+out highp vec4 vs_TEXCOORD4;
+out highp vec4 vs_TEXCOORD5;
+out highp vec4 vs_TEXCOORD6;
+vec4 u_xlat0;
+vec4 u_xlat1;
+vec2 u_xlat4;
+void main()
+{
+    u_xlat0 = in_POSITION0.yyyy * hlslcc_mtx4x4unity_ObjectToWorld[1];
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[0] * in_POSITION0.xxxx + u_xlat0;
+    u_xlat0 = hlslcc_mtx4x4unity_ObjectToWorld[2] * in_POSITION0.zzzz + u_xlat0;
+    u_xlat0 = u_xlat0 + hlslcc_mtx4x4unity_ObjectToWorld[3];
+    u_xlat1 = u_xlat0.yyyy * hlslcc_mtx4x4unity_MatrixVP[1];
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[0] * u_xlat0.xxxx + u_xlat1;
+    u_xlat1 = hlslcc_mtx4x4unity_MatrixVP[2] * u_xlat0.zzzz + u_xlat1;
+    u_xlat0 = hlslcc_mtx4x4unity_MatrixVP[3] * u_xlat0.wwww + u_xlat1;
+    gl_Position = u_xlat0;
+    u_xlat4.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    vs_TEXCOORD0.xy = u_xlat4.xy;
+    u_xlat0.xy = u_xlat4.xy * u_xlat0.xy;
+    vs_TEXCOORD1.xy = u_xlat0.xy;
+    vs_TEXCOORD2.xy = u_xlat0.xy;
+    vs_TEXCOORD3.xy = u_xlat0.xy;
+    vs_TEXCOORD4.xy = u_xlat0.xy;
+    vs_TEXCOORD5.xy = u_xlat0.xy;
+    vs_TEXCOORD6.xy = u_xlat0.xy;
+    return;
+}
+
+</code></pre>
+
+</details>
+
+<p>分析结果<br />
+<img alt="增大v2f3" src="../img/%E5%A2%9E%E5%A4%A7v2f3.png" /><br />
+<code>o.vertex.xy</code>只参与一次计算, 并把结果保存在<code>o.params</code>中, 其它<code>params</code>使用了该值同样会使<code>LS</code>上升</p>
 <h2 id="_4">总结</h2>
 <ul>
 <li><code>FMA</code>: 与加减乘除计算操作数成正比</li>
 <li><code>CVT</code>: 与不同类型间计算数量成正比</li>
 <li><code>SFU</code>: 与<code>inversesqrt</code>, <code>sqrt</code>, <code>normalize</code>等计算函数使用数量成正比</li>
-<li><code>LS</code>: 与顶点输入结构体的<code>texcoord</code>使用数量成正比, 即使是同样数量的texcoord, 但用<code>float4</code>和<code>float2</code>, <code>LS</code>的上升是相同的.</li>
+<li><code>LS</code>: 与顶点输入结构体的<code>texcoord</code>使用数量成正比, 即使是同样数量的texcoord, 但用<code>float4</code>和<code>float2</code>, <code>LS</code>的上升是相同的. 此外<code>LS</code>还与<code>v2f</code>中由<code>vertex</code>参与计算的变量数成正比.</li>
 <li><code>Varying</code>: 与<code>v2f</code>结构体大小, shader间插值计算成正比</li>
 <li><code>T</code>: 与贴图采样次数成正比</li>
 </ul>
